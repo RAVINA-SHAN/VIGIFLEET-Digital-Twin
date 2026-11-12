@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIFLEET 3D Digital Twin — Industrial Harbour Control Centre</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body, html { width: 100%; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0b141a; color: #0f291e; }
+    #canvas3d { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; outline: none; }
+    
+    /* UI Overlays */
+    .ui-layer { position: absolute; z-index: 10; pointer-events: none; }
+    .interactive { pointer-events: auto; }
+    
+    /* Top Bar */
+    #topBar {
+      top: 0; left: 0; right: 0; height: 56px;
+      background: rgba(255, 255, 255, 0.95);
+      border-bottom: 1px solid #d1e7dd;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px;
+    }
+    .logo-group { display: flex; align-items: center; gap: 12px; }
+    .logo-badge {
+      width: 36px; height: 36px; border-radius: 8px;
+      background: linear-gradient(135deg, #047857, #065f46);
+      color: white; display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 16px; letter-spacing: 1px;
+    }
+    .title-box h1 { font-size: 16px; font-weight: 800; color: #064e3b; letter-spacing: 0.5px; }
+    .title-box p { font-size: 10px; color: #047857; font-weight: 600; text-transform: uppercase; }
+    
+    .stats-group { display: flex; align-items: center; gap: 14px; font-size: 12px; font-weight: 600; }
+    .stat-pill {
+      padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .pill-green { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+    .pill-red { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .pill-blue { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .pill-grey { background: #f3f4f6; color: #4b5563; border: 1px solid #e5e7eb; }
+    
+    .btn {
+      padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 700;
+      border: 1px solid #d1e7dd; background: white; color: #064e3b; cursor: pointer;
+      transition: all 0.15s ease; outline: none;
+    }
+    .btn:hover { background: #ecfdf5; border-color: #059669; }
+    .btn-active { background: #059669 !important; color: white !important; border-color: #047857 !important; }
+    .btn-mode { font-size: 11px; padding: 6px 14px; border-radius: 6px; font-weight: 800; }
+    
+    /* Left Panel: Fleet Roster */
+    #leftPanel {
+      top: 66px; left: 14px; width: 280px; bottom: 175px;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid #d1e7dd; border-radius: 10px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .panel-header {
+      padding: 10px 14px; border-bottom: 1px solid #e2e8f0;
+      font-size: 11px; font-weight: 800; color: #064e3b; text-transform: uppercase;
+      background: #f8fafc; display: flex; justify-content: space-between; align-items: center;
+    }
+    .vehicle-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+    .vehicle-card {
+      padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; background: white;
+      cursor: pointer; transition: all 0.15s ease;
+    }
+    .vehicle-card:hover { border-color: #059669; background: #f0fdf4; }
+    .vehicle-card.selected { border-color: #059669; background: #ecfdf5; box-shadow: 0 0 0 2px rgba(5,150,105,0.25); }
+    .v-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .v-id { font-weight: 800; font-size: 12px; color: #0f172a; }
+    .v-meta { display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin-top: 2px; }
+    
+    /* Right Panel: Telemetry Drawer */
+    #rightPanel {
+      top: 66px; right: 14px; width: 320px; bottom: 175px;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid #d1e7dd; border-radius: 10px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .telemetry-content { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; font-size: 11px; }
+    .data-group {
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px;
+    }
+    .data-title { font-weight: 800; color: #047857; font-size: 10px; text-transform: uppercase; margin-bottom: 5px; }
+    .data-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .data-label { color: #64748b; font-weight: 600; }
+    .data-value { font-weight: 700; color: #0f172a; }
+    
+    .badge-signal { padding: 2px 8px; border-radius: 4px; font-size: 9px; font-weight: 800; }
+    .badge-on { background: #fee2e2; color: #991b1b; }
+    .badge-off { background: #dcfce7; color: #166534; }
+    .badge-unknown { background: #f1f5f9; color: #64748b; }
+    
+    /* Bottom Panel: Scenarios & Timeline */
+    #bottomPanel {
+      bottom: 12px; left: 14px; right: 14px; height: 155px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #d1e7dd; border-radius: 10px;
+      box-shadow: 0 -2px 14px rgba(0,0,0,0.06);
+      display: flex; gap: 16px; padding: 12px 16px;
+    }
+    .scenarios-box { width: 440px; display: flex; flex-direction: column; gap: 6px; }
+    .scenarios-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .controls-row { display: flex; gap: 8px; margin-top: 2px; }
+    
+    .timeline-box { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .timeline-stream {
+      flex: 1; overflow-y: auto; background: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 4px;
+    }
+    .event-entry {
+      padding: 5px 8px; border-radius: 4px; background: white; border: 1px solid #e2e8f0;
+      display: flex; align-items: center; gap: 8px; font-size: 11px;
+    }
+    
+    /* Camera Bar */
+    #cameraBar {
+      top: 66px; left: 50%; transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid #d1e7dd; border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      padding: 4px 10px; display: flex; align-items: center; gap: 6px; font-size: 11px;
+    }
+    
+    /* Voice Alert Banner */
+    #voiceAlertBanner {
+      top: 110px; left: 50%; transform: translateX(-50%);
+      min-width: 540px; padding: 10px 20px; border-radius: 8px;
+      color: white; font-weight: 800; font-size: 13px; text-align: center;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.35); display: none;
+      animation: alertPulse 1.2s infinite alternate ease-in-out;
+    }
+    @keyframes alertPulse { from { transform: translateX(-50%) scale(0.98); } to { transform: translateX(-50%) scale(1.02); } }
+  </style>
+</head>
+<body>
+
+  <!-- 3D WebGL Canvas -->
+  <div id="canvas3d"></div>
+
+  <!-- UI Top Bar -->
+  <div id="topBar" class="ui-layer interactive">
+    <div class="logo-group">
+      <div class="logo-badge">VF</div>
+      <div class="title-box">
+        <h1>VIGIFLEET 3D DIGITAL TWIN</h1>
+        <p>Intelligent V2V Cooperative Safety & Offline AI Control</p>
+      </div>
+    </div>
+
+    <div class="stats-group">
+      <div class="stat-pill pill-grey"><span>Fleet:</span> <b id="statFleetCount">4 Vehicles</b></div>
+      <div id="statAlertsPill" class="stat-pill pill-green"><b>ALL CLEAR (NORMAL)</b></div>
+      <div id="statWsPill" class="stat-pill pill-grey">○ WS CONNECTING</div>
+      <button id="btnModeToggle" class="btn btn-mode pill-blue">MODE: SIMULATION</button>
+      <button id="btnDayNight" class="btn">☀ Day / Night</button>
+      <button id="btnDashboard" class="btn" onclick="window.location.href='/'">← Control Dashboard</button>
+    </div>
+  </div>
+
+  <!-- Camera Presets -->
+  <div id="cameraBar" class="ui-layer interactive">
+    <span style="font-weight: 800; color: #064e3b;">CAMERA:</span>
+    <button class="btn btn-active" onclick="setCameraView('OVERVIEW')">Overview [F1]</button>
+    <button class="btn" onclick="setCameraView('QUAY')">Quay Cranes [F2]</button>
+    <button class="btn" onclick="setCameraView('CROSSING')">Crossing [F3]</button>
+    <button class="btn" onclick="setCameraView('COCKPIT')">In-Cab POV [F4]</button>
+    <button class="btn" onclick="setCameraView('FOLLOW')">Follow [F5]</button>
+  </div>
+
+  <!-- Voice Alert Banner -->
+  <div id="voiceAlertBanner" class="ui-layer"></div>
+
+  <!-- Left Fleet Panel -->
+  <div id="leftPanel" class="ui-layer interactive">
+    <div class="panel-header">
+      <span>Participating Vehicles</span>
+      <span id="v2vLinkCountBadge" style="color: #047857;">3 V2V Links</span>
+    </div>
+    <div class="vehicle-list" id="vehicleListContainer">
+      <!-- Populated dynamically -->
+    </div>
+  </div>
+
+  <!-- Right Telemetry Drawer -->
+  <div id="rightPanel" class="ui-layer interactive">
+    <div class="panel-header">
+      <span>Vehicle Telemetry Drawer</span>
+      <span id="telDataSourceBadge" style="color: #0369a1;">SIMULATION</span>
+    </div>
+    <div class="telemetry-content" id="telemetryDrawerContent">
+      <!-- Populated dynamically -->
+    </div>
+  </div>
+
+  <!-- Bottom Panel: Scenarios & Event Timeline -->
+  <div id="bottomPanel" class="ui-layer interactive">
+    <div class="scenarios-box">
+      <div class="panel-header" style="background: transparent; padding: 0 0 4px 0; border: none;">
+        <span>Interactive Demonstration Scenarios</span>
+      </div>
+      <div class="scenarios-grid">
+        <button id="btnScen1" class="btn btn-active" onclick="triggerScenario('BLIND_INTERSECTION')">1. Blind Intersection</button>
+        <button id="btnScen2" class="btn" onclick="triggerScenario('FORKLIFT_REVERSING')">2. Forklift Reversing</button>
+        <button id="btnScen3" class="btn" onclick="triggerScenario('SUDDEN_STOP')">3. Sudden Stop</button>
+        <button id="btnScen4" class="btn" onclick="triggerScenario('RESTRICTED_ZONE_ENTRY')">4. Restricted Zone</button>
+      </div>
+      <div class="controls-row">
+        <button id="btnAutoCycle" class="btn" style="flex: 1;" onclick="triggerScenario('AUTO_CYCLE')">Auto Multi-Scenario Cycle</button>
+        <button id="btnPlayPause" class="btn" onclick="togglePlayPause()">⏸ Pause</button>
+        <button id="btnReset" class="btn" onclick="resetScenario()">↺ Reset</button>
+        <button id="btnSpeed" class="btn" onclick="toggleSpeed()">1x Speed</button>
+      </div>
+    </div>
+
+    <div class="timeline-box">
+      <div class="panel-header" style="background: transparent; padding: 0 0 4px 0; border: none;">
+        <span>Safety Event Timeline (ESP32 In-Cab Voice Alerts)</span>
+        <span id="timelineCountLabel" style="color: #64748b;">0 Events</span>
+      </div>
+      <div class="timeline-stream" id="eventTimelineStream">
+        <div style="color: #64748b; font-size: 11px; padding: 8px;">Fleet operating under nominal clearance. No collision hazards detected.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts: Offline local Three.js & OrbitControls -->
+  <script src="/3d/js/three.min.js"></script>
+  <script src="/3d/js/OrbitControls.js"></script>
+
+  <!-- Application Logic -->
+  <script>
+    // --- 1. Coordinate Datum & Conversion ---
+    const REF_LAT = 13.0825;
+    const REF_LON = 80.2900;
+    const EARTH_RADIUS = 6371000.0;
+    const DEG_TO_RAD = Math.PI / 180.0;
+
+    function latLonToWorld(lat, lon) {
+      const dLat = (lat - REF_LAT) * DEG_TO_RAD;
+      const dLon = (lon - REF_LON) * DEG_TO_RAD;
+      const z = dLat * EARTH_RADIUS; // North = +Z
+      const x = dLon * EARTH_RADIUS * Math.cos(REF_LAT * DEG_TO_RAD); // East = +X
+      return { x: x, y: 0, z: z };
+    }
+
+    // --- 2. Three.js Scene Setup ---
+    const container = document.getElementById('canvas3d');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xd9eafd);
+    scene.fog = new THREE.FogExp2(0xd9eafd, 0.0018);
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.5, 1200);
+    camera.position.set(0, 160, -150);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI * 0.48; // Don't go below ground
+    controls.minDistance = 6;
+    controls.maxDistance = 450;
+    controls.target.set(0, 0, 0);
+
+    // --- 3. Lighting & Day/Night Cycle ---
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444455, 0.65);
+    scene.add(hemiLight);
+
+    const dirLight = new THREE.DirectionalLight(0xfffaed, 1.35);
+    dirLight.position.set(120, 220, -120);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.camera.near = 10;
+    dirLight.shadow.camera.far = 600;
+    const d = 260;
+    dirLight.shadow.camera.left = -d;
+    dirLight.shadow.camera.right = d;
+    dirLight.shadow.camera.top = d;
+    dirLight.shadow.camera.bottom = -d;
+    scene.add(dirLight);
+
+    let isNightMode = false;
+    function toggleDayNight() {
+      isNightMode = !isNightMode;
+      if (isNightMode) {
+        scene.background.set(0x0a1118);
+        scene.fog.color.set(0x0a1118);
+        dirLight.intensity = 0.2;
+        dirLight.color.set(0x5577aa);
+        hemiLight.intensity = 0.25;
+      } else {
+        scene.background.set(0xd9eafd);
+        scene.fog.color.set(0xd9eafd);
+        dirLight.intensity = 1.35;
+        dirLight.color.set(0xfffaed);
+        hemiLight.intensity = 0.65;
+      }
+    }
+    document.getElementById('btnDayNight').onclick = toggleDayNight;
+
+    // --- 4. Harbour Environment Builder ---
+    function buildHarbourEnvironment() {
+      // Concrete Apron Ground (650m x 550m)
+      const groundGeo = new THREE.PlaneGeometry(650, 550);
+      const groundMat = new THREE.MeshLambertMaterial({ color: 0x94a3b8 });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      // Quayside Seawall (X = 150)
+      const seawallGeo = new THREE.BoxGeometry(8, 6, 550);
+      const seawallMat = new THREE.MeshLambertMaterial({ color: 0x64748b });
+      const seawall = new THREE.Mesh(seawallGeo, seawallMat);
+      seawall.position.set(154, -0.5, 0);
+      seawall.receiveShadow = true;
+      seawall.castShadow = true;
+      scene.add(seawall);
+
+      // Deep Ocean Water (East of quay)
+      const waterGeo = new THREE.PlaneGeometry(350, 650);
+      const waterMat = new THREE.MeshStandardMaterial({
+        color: 0x0369a1,
+        roughness: 0.15,
+        metalness: 0.85,
+        transparent: true,
+        opacity: 0.88
+      });
+      const water = new THREE.Mesh(waterGeo, waterMat);
+      water.rotation.x = -Math.PI / 2;
+      water.position.set(330, -2.5, 0);
+      scene.add(water);
+
+      // Mooring bollards along quay
+      for (let z = -240; z <= 240; z += 35) {
+        const bGeo = new THREE.CylinderGeometry(0.4, 0.45, 1.2, 12);
+        const bMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+        const bollard = new THREE.Mesh(bGeo, bMat);
+        bollard.position.set(151.5, 1.1, z);
+        bollard.castShadow = true;
+        scene.add(bollard);
+      }
+
+      // Asphalt Road Grid
+      createRoadSegment("MainEWSpine", -35, 0, 360, 16, true);
+      createRoadSegment("NorthAvenue", -35, 100, 360, 13, true);
+      createRoadSegment("SouthAvenue", -35, -90, 360, 13, true);
+      createRoadSegment("WestCorridor", -130, 5, 13, 280, false);
+      createRoadSegment("BlindIntersectionCorridor", -35, 5, 13, 280, false); // Critical intersection site
+      createRoadSegment("QuayServiceRoad", 120, 5, 14, 320, false);
+
+      // Container Storage Yards (Stacks C1..C4 + Hazmat Yard)
+      createContainerBlock("Stack_C1", -80, 50, 3, 4, 3);
+      createContainerBlock("Stack_C2", 40, 50, 3, 4, 4);
+      createContainerBlock("Stack_C3_BlindCorner", -80, -45, 4, 4, 4); // BLOCKS LINE OF SIGHT AT INTERSECTION
+      createContainerBlock("Stack_C4", 40, -45, 3, 4, 3);
+      createContainerBlock("HazmatYard_Restricted", -85, 150, 2, 3, 2, true);
+
+      // Ship-to-Shore (STS) Gantry Cranes along Berth 4 (Height 45m)
+      createSTSCrane("STS_Crane_01", 145, -90);
+      createSTSCrane("STS_Crane_02", 145, 20);
+      createSTSCrane("STS_Crane_03", 145, 120);
+
+      // Warehouses / Freight Sheds
+      createWarehouse("CFS_Warehouse_1", -200, 60, 45, 14, 90);
+      createWarehouse("CFS_Warehouse_2", -200, -60, 45, 14, 90);
+
+      // Security Gate Checkpoint
+      createSecurityGate(-220, 0);
+
+      // High-Mast Floodlight Towers
+      const towerCoords = [
+        [-130, -80], [-130, 80], [-35, -90], [-35, 90],
+        [60, -90], [60, 90], [135, -140], [135, 140]
+      ];
+      towerCoords.forEach(([x, z]) => createFloodlightTower(x, z));
+    }
+
+    function createRoadSegment(name, x, z, width, length, isEastWest) {
+      const w = isEastWest ? width : length;
+      const l = isEastWest ? length : width;
+      const geo = new THREE.PlaneGeometry(w, l);
+      const mat = new THREE.MeshLambertMaterial({ color: 0x334155 });
+      const road = new THREE.Mesh(geo, mat);
+      road.rotation.x = -Math.PI / 2;
+      road.position.set(x, 0.05, z);
+      road.receiveShadow = true;
+      scene.add(road);
+
+      // Yellow Centerline
+      const lineGeo = new THREE.PlaneGeometry(isEastWest ? w : 0.3, isEastWest ? 0.3 : l);
+      const lineMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+      const line = new THREE.Mesh(lineGeo, lineMat);
+      line.rotation.x = -Math.PI / 2;
+      line.position.set(x, 0.07, z);
+      scene.add(line);
+    }
+
+    const containerColors = [0x38bdf8, 0xf97316, 0x16a34a, 0x1e3a8a, 0xdc2626, 0xe2e8f0, 0xeab308];
+
+    function createContainerBlock(name, x, z, rows, cols, maxTiers, isHazmat = false) {
+      const group = new THREE.Group();
+      group.position.set(x, 0, z);
+
+      const cLen = 12.2;
+      const cWid = 2.44;
+      const cHgt = 2.59;
+      let colIdx = 0;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const tiers = Math.floor(Math.random() * maxTiers) + 1;
+          for (let t = 0; t < tiers; t++) {
+            const geo = new THREE.BoxGeometry(cWid, cHgt, cLen);
+            const color = isHazmat ? 0xf97316 : containerColors[colIdx % containerColors.length];
+            const mat = new THREE.MeshLambertMaterial({ color: color });
+            const box = new THREE.Mesh(geo, mat);
+            box.position.set(
+              (c - cols * 0.5) * (cWid + 0.6),
+              (t * cHgt) + (cHgt * 0.5),
+              (r - rows * 0.5) * (cLen + 1.2)
+            );
+            box.castShadow = true;
+            box.receiveShadow = true;
+            group.add(box);
+            colIdx++;
+          }
+        }
+      }
+      scene.add(group);
+    }
+
+    function createSTSCrane(name, x, z) {
+      const crane = new THREE.Group();
+      crane.position.set(x, 0, z);
+
+      const blueMat = new THREE.MeshLambertMaterial({ color: 0x1d4ed8 });
+      const darkMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+      const yellowMat = new THREE.MeshLambertMaterial({ color: 0xfacc15 });
+
+      // Legs portal
+      const legGeo = new THREE.BoxGeometry(2.5, 36, 16);
+      const legA = new THREE.Mesh(legGeo, blueMat);
+      legA.position.set(-8, 18, 0);
+      legA.castShadow = true;
+      crane.add(legA);
+
+      const legB = new THREE.Mesh(legGeo, blueMat);
+      legB.position.set(8, 18, 0);
+      legB.castShadow = true;
+      crane.add(legB);
+
+      // Outreach Boom (65m long)
+      const boomGeo = new THREE.BoxGeometry(65, 3.5, 4.5);
+      const boom = new THREE.Mesh(boomGeo, blueMat);
+      boom.position.set(18, 38, 0);
+      boom.castShadow = true;
+      crane.add(boom);
+
+      // Apex A-Frame
+      const apexGeo = new THREE.BoxGeometry(14, 18, 3.5);
+      const apex = new THREE.Mesh(apexGeo, blueMat);
+      apex.position.set(0, 48, 0);
+      apex.castShadow = true;
+      crane.add(apex);
+
+      // Spreader
+      const spGeo = new THREE.BoxGeometry(2.8, 1.2, 12.2);
+      const spreader = new THREE.Mesh(spGeo, yellowMat);
+      spreader.position.set(16, 20, 0);
+      spreader.castShadow = true;
+      crane.add(spreader);
+
+      scene.add(crane);
+    }
+
+    function createWarehouse(name, x, z, w, h, l) {
+      const wh = new THREE.Group();
+      wh.position.set(x, 0, z);
+
+      const mat = new THREE.MeshLambertMaterial({ color: 0xcbd5e1 });
+      const roofMat = new THREE.MeshLambertMaterial({ color: 0x475569 });
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, l), mat);
+      body.position.set(0, h * 0.5, 0);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      wh.add(body);
+
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 2, 2.5, l + 2), roofMat);
+      roof.position.set(0, h + 1.25, 0);
+      roof.castShadow = true;
+      wh.add(roof);
+
+      scene.add(wh);
+    }
+
+    function createSecurityGate(x, z) {
+      const gate = new THREE.Group();
+      gate.position.set(x, 0, z);
+
+      const canopyMat = new THREE.MeshLambertMaterial({ color: 0x0284c7 });
+      const canopy = new THREE.Mesh(new THREE.BoxGeometry(16, 1.2, 32), canopyMat);
+      canopy.position.set(0, 6.5, 0);
+      canopy.castShadow = true;
+      gate.add(canopy);
+
+      const boothMat = new THREE.MeshLambertMaterial({ color: 0xf1f5f9 });
+      const booth = new THREE.Mesh(new THREE.BoxGeometry(3, 3.2, 2.5), boothMat);
+      booth.position.set(0, 1.6, 0);
+      booth.castShadow = true;
+      gate.add(booth);
+
+      scene.add(gate);
+    }
+
+    function createFloodlightTower(x, z) {
+      const tower = new THREE.Group();
+      tower.position.set(x, 0, z);
+
+      const poleMat = new THREE.MeshLambertMaterial({ color: 0x64748b });
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 25, 8), poleMat);
+      pole.position.set(0, 12.5, 0);
+      pole.castShadow = true;
+      tower.add(pole);
+
+      const head = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.8, 2), new THREE.MeshLambertMaterial({ color: 0x1e293b }));
+      head.position.set(0, 25.4, 0);
+      tower.add(head);
+
+      scene.add(tower);
+    }
+
+    buildHarbourEnvironment();
+
+    // --- 5. Fleet Models & Representation ---
+    const fleet = {
+      "VIGI-TRUCK-001": {
+        id: "VIGI-TRUCK-001",
+        displayName: "Legacy Haulage Truck",
+        category: "Old Truck",
+        mode: "LEGACY",
+        mesh: null,
+        wheels: [],
+        speedKmh: 24.5,
+        speedMps: 6.8,
+        heading: 90,
+        accel: 0.2,
+        status: "MOVING",
+        brake: "UNKNOWN",
+        reverse: "UNKNOWN",
+        gnssFix: true,
+        accuracyM: 2.5,
+        commStatus: "CONNECTED",
+        risk: "NORMAL",
+        uncertaintyMesh: null,
+        targetPos: new THREE.Vector3(-60, 0, 0),
+        targetRot: 90
+      },
+      "VIGI-TRUCK-002": {
+        id: "VIGI-TRUCK-002",
+        displayName: "Modern Container Truck",
+        category: "Modern Truck",
+        mode: "MODERN",
+        mesh: null,
+        wheels: [],
+        speedKmh: 23.4,
+        speedMps: 6.5,
+        heading: 0,
+        accel: 0.1,
+        status: "MOVING",
+        brake: "OFF",
+        reverse: "OFF",
+        gnssFix: true,
+        accuracyM: 1.8,
+        commStatus: "CONNECTED",
+        risk: "NORMAL",
+        uncertaintyMesh: null,
+        targetPos: new THREE.Vector3(-35, 0, -40),
+        targetRot: 0
+      },
+      "VIGI-FORK-001": {
+        id: "VIGI-FORK-001",
+        displayName: "Heavy Yard Forklift",
+        category: "Forklift",
+        mode: "LEGACY",
+        mesh: null,
+        wheels: [],
+        speedKmh: 10.1,
+        speedMps: 2.8,
+        heading: 0,
+        accel: -0.3,
+        status: "MOVING",
+        brake: "UNKNOWN",
+        reverse: "ON",
+        gnssFix: true,
+        accuracyM: 3.2,
+        commStatus: "CONNECTED",
+        risk: "NORMAL",
+        uncertaintyMesh: null,
+        targetPos: new THREE.Vector3(80, 0, -20),
+        targetRot: 0
+      },
+      "VIGI-TRACTOR-001": {
+        id: "VIGI-TRACTOR-001",
+        displayName: "Ro-Ro Terminal Tractor",
+        category: "Terminal Tractor",
+        mode: "MODERN",
+        mesh: null,
+        wheels: [],
+        speedKmh: 18.7,
+        speedMps: 5.2,
+        heading: 90,
+        accel: 0.1,
+        status: "MOVING",
+        brake: "OFF",
+        reverse: "OFF",
+        gnssFix: true,
+        accuracyM: 2.0,
+        commStatus: "CONNECTED",
+        risk: "NORMAL",
+        uncertaintyMesh: null,
+        targetPos: new THREE.Vector3(100, 0, 20),
+        targetRot: 90
+      }
+    };
+
+    function build3DVehicles() {
+      // 1. VIGI-TRUCK-001 (Legacy Tipper Truck)
+      const t1 = new THREE.Group();
+      const t1Cab = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.2, 2.6), new THREE.MeshLambertMaterial({ color: 0xd4d4d8 }));
+      t1Cab.position.set(0, 1.85, 2.6);
+      t1Cab.castShadow = true;
+      t1.add(t1Cab);
+
+      // Rooftop GNSS Pod (Retrofit)
+      const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.1, 12), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+      pod.position.set(0, 3.0, 2.6);
+      t1.add(pod);
+
+      // Tipper Bed
+      const tipper = new THREE.Mesh(new THREE.BoxGeometry(2.45, 1.8, 5.2), new THREE.MeshLambertMaterial({ color: 0xb91c1c }));
+      tipper.position.set(0, 1.8, -1.3);
+      tipper.castShadow = true;
+      t1.add(tipper);
+
+      addWheels(t1, 0.55, 1.15, [2.6], [-1.8, -3.2]);
+      scene.add(t1);
+      fleet["VIGI-TRUCK-001"].mesh = t1;
+
+      // 2. VIGI-TRUCK-002 (Modern Euro Prime Mover + 40ft Container Trailer)
+      const t2 = new THREE.Group();
+      const t2Cab = new THREE.Mesh(new THREE.BoxGeometry(2.55, 2.8, 3.2), new THREE.MeshLambertMaterial({ color: 0x1d4ed8 }));
+      t2Cab.position.set(0, 2.1, 5.0);
+      t2Cab.castShadow = true;
+      t2.add(t2Cab);
+
+      const trailer = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.45, 12.8), new THREE.MeshLambertMaterial({ color: 0x334155 }));
+      trailer.position.set(0, 1.1, -1.5);
+      trailer.castShadow = true;
+      t2.add(trailer);
+
+      const t2Box = new THREE.Mesh(new THREE.BoxGeometry(2.44, 2.59, 12.2), new THREE.MeshLambertMaterial({ color: 0x38bdf8 }));
+      t2Box.position.set(0, 2.6, -1.5);
+      t2Box.castShadow = true;
+      t2.add(t2Box);
+
+      addWheels(t2, 0.55, 1.15, [5.2], [2.4, 3.6, -4.8, -6.1, -7.4]);
+      scene.add(t2);
+      fleet["VIGI-TRUCK-002"].mesh = t2;
+
+      // 3. VIGI-FORK-001 (Heavy Yard Forklift)
+      const f1 = new THREE.Group();
+      const fBody = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.9, 2.6), new THREE.MeshLambertMaterial({ color: 0xeab308 }));
+      fBody.position.set(0, 0.75, -0.2);
+      fBody.castShadow = true;
+      f1.add(fBody);
+
+      const fCage = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.3, 1.4), new THREE.MeshLambertMaterial({ color: 0x1e293b }));
+      fCage.position.set(0, 1.85, -0.2);
+      fCage.castShadow = true;
+      f1.add(fCage);
+
+      const fMast = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.4, 0.25), new THREE.MeshLambertMaterial({ color: 0x334155 }));
+      fMast.position.set(0, 1.5, 1.3);
+      f1.add(fMast);
+
+      addWheels(f1, 0.4, 0.85, [0.9], [-1.1]);
+      scene.add(f1);
+      fleet["VIGI-FORK-001"].mesh = f1;
+
+      // 4. VIGI-TRACTOR-001 (Ro-Ro Bomb-Cart Terminal Tractor)
+      const tt1 = new THREE.Group();
+      const ttCab = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.3, 2.4), new THREE.MeshLambertMaterial({ color: 0xea580c }));
+      ttCab.position.set(-0.45, 1.9, 1.2);
+      ttCab.castShadow = true;
+      tt1.add(ttCab);
+
+      const ttDeck = new THREE.Mesh(new THREE.BoxGeometry(2.45, 0.65, 5.8), new THREE.MeshLambertMaterial({ color: 0x1e293b }));
+      ttDeck.position.set(0, 0.85, -0.4);
+      ttDeck.castShadow = true;
+      tt1.add(ttDeck);
+
+      addWheels(tt1, 0.5, 1.15, [1.8], [-1.8]);
+      scene.add(tt1);
+      fleet["VIGI-TRACTOR-001"].mesh = tt1;
+
+      // GNSS Uncertainty Rings
+      Object.values(fleet).forEach(v => {
+        const ringGeo = new THREE.RingGeometry(2.3, 2.5, 32);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0x0284c7, side: THREE.DoubleSide, transparent: true, opacity: 0.65 });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.08;
+        scene.add(ring);
+        v.uncertaintyMesh = ring;
+      });
+    }
+
+    function addWheels(parent, radius, track, frontZ, rearZ) {
+      const wMat = new THREE.MeshLambertMaterial({ color: 0x0f172a });
+      const wGeo = new THREE.CylinderGeometry(radius, radius, 0.35, 16);
+
+      const allZ = [...frontZ, ...rearZ];
+      allZ.forEach(z => {
+        [-track, track].forEach(x => {
+          const w = new THREE.Mesh(wGeo, wMat);
+          w.rotation.z = Math.PI / 2;
+          w.position.set(x, radius, z);
+          w.castShadow = true;
+          parent.add(w);
+        });
+      });
+    }
+
+    build3DVehicles();
+
+    // --- 6. V2V Communication Wireless Link Visualizer ---
+    const v2vLinkLines = [];
+    for (let i = 0; i < 6; i++) {
+      const geo = new THREE.BufferGeometry();
+      const mat = new THREE.LineBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.75, linewidth: 2 });
+      const line = new THREE.Line(geo, mat);
+      line.visible = false;
+      scene.add(line);
+      v2vLinkLines.push(line);
+    }
+
+    function updateV2VLinks() {
+      const vKeys = Object.keys(fleet);
+      let lineIdx = 0;
+      let activeLinks = 0;
+
+      for (let i = 0; i < vKeys.length; i++) {
+        for (let j = i + 1; j < vKeys.length; j++) {
+          const vA = fleet[vKeys[i]];
+          const vB = fleet[vKeys[j]];
+          if (!vA.mesh || !vB.mesh) continue;
+
+          const dist = vA.mesh.position.distanceTo(vB.mesh.position);
+          if (dist < 160 && lineIdx < v2vLinkLines.length) {
+            const line = v2vLinkLines[lineIdx++];
+            line.visible = true;
+            activeLinks++;
+
+            const pts = [];
+            const pA = vA.mesh.position.clone().add(new THREE.Vector3(0, 2.2, 0));
+            const pB = vB.mesh.position.clone().add(new THREE.Vector3(0, 2.2, 0));
+            const mid = pA.clone().add(pB).multiplyScalar(0.5).add(new THREE.Vector3(0, 3.5 + dist * 0.02, 0));
+
+            for (let t = 0; t <= 1; t += 0.08) {
+              const p = pA.clone().multiplyScalar((1 - t) * (1 - t))
+                .add(mid.clone().multiplyScalar(2 * (1 - t) * t))
+                .add(pB.clone().multiplyScalar(t * t));
+              pts.push(p);
+            }
+            line.geometry.setFromPoints(pts);
+
+            // Health color
+            if (vA.commStatus === "STALE" || vB.commStatus === "STALE") {
+              line.material.color.set(0xef4444);
+            } else if (dist > 120) {
+              line.material.color.set(0xf59e0b);
+            } else {
+              line.material.color.set(0x10b981);
+            }
+          }
+        }
+      }
+
+      for (let k = lineIdx; k < v2vLinkLines.length; k++) {
+        v2vLinkLines[k].visible = false;
+      }
+      document.getElementById('v2vLinkCountBadge').innerText = `${activeLinks} V2V Links Active`;
+    }
+
+    // --- 7. Dynamic 3D Ground Conflict Zone & Trajectory Visualizer ---
+    const conflictCircleGeo = new THREE.RingGeometry(4.8, 5.2, 32);
+    const conflictCircleMat = new THREE.MeshBasicMaterial({ color: 0xdc2626, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+    const conflictCircle = new THREE.Mesh(conflictCircleGeo, conflictCircleMat);
+    conflictCircle.rotation.x = -Math.PI / 2;
+    conflictCircle.position.set(0, 0.12, 0);
+    conflictCircle.visible = false;
+    scene.add(conflictCircle);
+
+    const trajLineMat = new THREE.LineBasicMaterial({ color: 0xdc2626, linewidth: 2 });
+    const trajLineA = new THREE.Line(new THREE.BufferGeometry(), trajLineMat);
+    const trajLineB = new THREE.Line(new THREE.BufferGeometry(), trajLineMat);
+    scene.add(trajLineA);
+    scene.add(trajLineB);
+
+    function updateConflictZone(inter) {
+      if (!inter.hasConflict || inter.risk === "NORMAL") {
+        conflictCircle.visible = false;
+        trajLineA.visible = false;
+        trajLineB.visible = false;
+        return;
+      }
+
+      conflictCircle.visible = true;
+      conflictCircle.position.set(inter.conflictX, 0.12, inter.conflictZ);
+
+      const col = (inter.risk === "CRITICAL") ? 0xdc2626 : (inter.risk === "HIGH RISK" ? 0xea580c : 0xf59e0b);
+      conflictCircleMat.color.set(col);
+      trajLineMat.color.set(col);
+
+      // Trajectory lines
+      if (inter.vA && inter.vA.mesh) {
+        trajLineA.visible = true;
+        trajLineA.geometry.setFromPoints([
+          inter.vA.mesh.position.clone().add(new THREE.Vector3(0, 0.5, 0)),
+          new THREE.Vector3(inter.conflictX, 0.12, inter.conflictZ)
+        ]);
+      }
+      if (inter.vB && inter.vB.mesh) {
+        trajLineB.visible = true;
+        trajLineB.geometry.setFromPoints([
+          inter.vB.mesh.position.clone().add(new THREE.Vector3(0, 0.5, 0)),
+          new THREE.Vector3(inter.conflictX, 0.12, inter.conflictZ)
+        ]);
+      }
+    }
+
+    // --- 8. Geofences System (6 Harbour Zones) ---
+    const geofences = [
+      { id: "GF-CRANE-01", name: "Berth 4 Crane Zone", cat: "Crane Operating Zone", coords: [[13.0842, 80.2902], [13.0842, 80.2924], [13.0830, 80.2924], [13.0830, 80.2902]], color: 0xf59e0b },
+      { id: "GF-HAZMAT-02", name: "North Hazmat Yard", cat: "Restricted Cargo Area", coords: [[13.0852, 80.2880], [13.0852, 80.2900], [13.0838, 80.2900], [13.0838, 80.2880]], color: 0xdc2626 },
+      { id: "GF-BLIND-03", name: "Stack C3 Blind Crossing", cat: "Blind Intersection", coords: [[13.0829, 80.2890], [13.0829, 80.2904], [13.0819, 80.2904], [13.0819, 80.2890]], color: 0xeab308 },
+      { id: "GF-PED-04", name: "Customs Pedestrian Walkway", cat: "Pedestrian Crossing", coords: [[13.0817, 80.2882], [13.0817, 80.2898], [13.0810, 80.2898], [13.0810, 80.2882]], color: 0x06b6d4 },
+      { id: "GF-WATER-05", name: "East Quay Edge", cat: "Water-Side Boundary", coords: [[13.0850, 80.2926], [13.0850, 80.2938], [13.0812, 80.2938], [13.0812, 80.2926]], color: 0x0284c7 },
+      { id: "GF-LANE-06", name: "Main Haulage Spine", cat: "Operating Lane", coords: [[13.0835, 80.2875], [13.0835, 80.2925], [13.0822, 80.2925], [13.0822, 80.2875]], color: 0x10b981 }
+    ];
+
+    geofences.forEach(gf => {
+      const pts = gf.coords.map(c => {
+        const w = latLonToWorld(c[0], c[1]);
+        return new THREE.Vector3(w.x, 0.15, w.z);
+      });
+      pts.push(pts[0]); // Loop back
+
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({ color: gf.color, linewidth: 2 });
+      const line = new THREE.Line(geo, mat);
+      scene.add(line);
+    });
+
+    // --- 9. Scenarios Controller ---
+    let currentScenario = "BLIND_INTERSECTION";
+    let isPlaying = true;
+    let simSpeed = 1.0;
+    let scenarioTime = 0;
+    const cycleDuration = 16.0;
+
+    function triggerScenario(scen) {
+      currentScenario = scen;
+      scenarioTime = 0;
+      ['btnScen1', 'btnScen2', 'btnScen3', 'btnScen4', 'btnAutoCycle'].forEach(id => {
+        document.getElementById(id).classList.remove('btn-active');
+      });
+      if (scen === 'BLIND_INTERSECTION') document.getElementById('btnScen1').classList.add('btn-active');
+      if (scen === 'FORKLIFT_REVERSING') document.getElementById('btnScen2').classList.add('btn-active');
+      if (scen === 'SUDDEN_STOP') document.getElementById('btnScen3').classList.add('btn-active');
+      if (scen === 'RESTRICTED_ZONE_ENTRY') document.getElementById('btnScen4').classList.add('btn-active');
+      if (scen === 'AUTO_CYCLE') document.getElementById('btnAutoCycle').classList.add('btn-active');
+
+      // Trigger on backend as well
+      fetch(`/api/system/scenario?scenario=${encodeURIComponent(scen)}`, { method: 'POST' }).catch(() => {});
+    }
+
+    function togglePlayPause() {
+      isPlaying = !isPlaying;
+      document.getElementById('btnPlayPause').innerText = isPlaying ? "⏸ Pause" : "▶ Play";
+    }
+
+    function resetScenario() {
+      scenarioTime = 0;
+    }
+
+    function toggleSpeed() {
+      simSpeed = (simSpeed === 1.0) ? 2.0 : 1.0;
+      document.getElementById('btnSpeed').innerText = `${simSpeed}x Speed`;
+    }
+
+    function executeScenarios(delta) {
+      if (!isPlaying) return;
+      scenarioTime += delta * simSpeed;
+
+      let effectiveScen = currentScenario;
+      if (currentScenario === "AUTO_CYCLE") {
+        const phase = Math.floor(scenarioTime / cycleDuration) % 4;
+        effectiveScen = ["BLIND_INTERSECTION", "FORKLIFT_REVERSING", "SUDDEN_STOP", "RESTRICTED_ZONE_ENTRY"][phase];
+      }
+
+      const tNorm = (scenarioTime % cycleDuration) / cycleDuration; // 0..1
+
+      if (effectiveScen === "BLIND_INTERSECTION") {
+        // Truck 001 Eastbound & Truck 002 Northbound converging on Stack C3 intersection (-35, 15)
+        const intX = -35;
+        const intZ = 15;
+        const distA = (0.5 - tNorm) * 90;
+        const distB = (0.5 - tNorm) * 85;
+
+        fleet["VIGI-TRUCK-001"].targetPos.set(intX - distA, 0, intZ);
+        fleet["VIGI-TRUCK-001"].targetRot = 90;
+        fleet["VIGI-TRUCK-001"].speedKmh = 24.5;
+        fleet["VIGI-TRUCK-001"].speedMps = 6.8;
+
+        fleet["VIGI-TRUCK-002"].targetPos.set(intX, 0, intZ - distB);
+        fleet["VIGI-TRUCK-002"].targetRot = 0;
+        fleet["VIGI-TRUCK-002"].speedKmh = 23.4;
+        fleet["VIGI-TRUCK-002"].speedMps = 6.5;
+
+        const ttc = Math.abs(distA) / 6.8;
+        if (Math.abs(distA) < 45) {
+          const risk = ttc < 3.2 ? "CRITICAL" : (ttc < 6.5 ? "HIGH RISK" : "CAUTION");
+          fleet["VIGI-TRUCK-001"].risk = risk;
+          fleet["VIGI-TRUCK-002"].risk = risk;
+          updateConflictZone({ hasConflict: true, conflictX: intX, conflictZ: intZ, risk: risk, vA: fleet["VIGI-TRUCK-001"], vB: fleet["VIGI-TRUCK-002"] });
+          dispatchVoiceAlert("Warning! Vehicle approaching from your right. Yield immediately.", risk);
+        } else {
+          fleet["VIGI-TRUCK-001"].risk = "NORMAL";
+          fleet["VIGI-TRUCK-002"].risk = "NORMAL";
+          updateConflictZone({ hasConflict: false });
+        }
+      }
+      else if (effectiveScen === "FORKLIFT_REVERSING") {
+        // Forklift reversing in bay (80, -40)
+        const forkZ = 15 - tNorm * 27;
+        fleet["VIGI-FORK-001"].targetPos.set(80, 0, forkZ);
+        fleet["VIGI-FORK-001"].targetRot = 0;
+        fleet["VIGI-FORK-001"].reverse = "ON";
+        fleet["VIGI-FORK-001"].speedKmh = 10.1;
+
+        // Terminal tractor crossing path
+        const tracX = -30 + tNorm * 75;
+        fleet["VIGI-TRACTOR-001"].targetPos.set(tracX, 0, -10);
+        fleet["VIGI-TRACTOR-001"].targetRot = 90;
+        fleet["VIGI-TRACTOR-001"].speedKmh = 18.7;
+
+        if (tNorm > 0.3 && tNorm < 0.75) {
+          fleet["VIGI-FORK-001"].risk = "HIGH RISK";
+          fleet["VIGI-TRACTOR-001"].risk = "HIGH RISK";
+          updateConflictZone({ hasConflict: true, conflictX: 80, conflictZ: -10, risk: "HIGH RISK", vA: fleet["VIGI-FORK-001"], vB: fleet["VIGI-TRACTOR-001"] });
+          dispatchVoiceAlert("Caution! Industrial forklift reversing nearby. Reduce speed.", "HIGH RISK");
+        } else {
+          fleet["VIGI-FORK-001"].risk = "NORMAL";
+          fleet["VIGI-TRACTOR-001"].risk = "NORMAL";
+          updateConflictZone({ hasConflict: false });
+        }
+      }
+      else if (effectiveScen === "SUDDEN_STOP") {
+        const isBraking = (tNorm > 0.35 && tNorm < 0.85);
+        const leadDist = isBraking ? 45 : (tNorm * 90);
+        fleet["VIGI-TRUCK-002"].targetPos.set(-120 + leadDist, 0, 60);
+        fleet["VIGI-TRUCK-002"].targetRot = 90;
+        fleet["VIGI-TRUCK-002"].brake = isBraking ? "ON" : "OFF";
+        fleet["VIGI-TRUCK-002"].status = isBraking ? "STOPPED" : "MOVING";
+        fleet["VIGI-TRUCK-002"].accel = isBraking ? -4.8 : 0.2;
+
+        const trailDist = isBraking ? 32 : (tNorm * 75 - 15);
+        fleet["VIGI-TRUCK-001"].targetPos.set(-120 + trailDist, 0, 60);
+        fleet["VIGI-TRUCK-001"].targetRot = 90;
+
+        if (isBraking) {
+          fleet["VIGI-TRUCK-001"].risk = "CRITICAL";
+          fleet["VIGI-TRUCK-002"].risk = "HIGH RISK";
+          updateConflictZone({ hasConflict: true, conflictX: -120 + leadDist, conflictZ: 60, risk: "CRITICAL", vA: fleet["VIGI-TRUCK-001"], vB: fleet["VIGI-TRUCK-002"] });
+          dispatchVoiceAlert("Warning! Vehicle ahead has stopped. Apply brakes immediately.", "CRITICAL");
+        } else {
+          fleet["VIGI-TRUCK-001"].risk = "NORMAL";
+          fleet["VIGI-TRUCK-002"].risk = "NORMAL";
+          updateConflictZone({ hasConflict: false });
+        }
+      }
+      else if (effectiveScen === "RESTRICTED_ZONE_ENTRY") {
+        const hazZ = 70 + tNorm * 70;
+        fleet["VIGI-TRUCK-001"].targetPos.set(-90, 0, hazZ);
+        fleet["VIGI-TRUCK-001"].targetRot = 0;
+        if (hazZ > 120) {
+          fleet["VIGI-TRUCK-001"].risk = "CRITICAL";
+          dispatchVoiceAlert("Warning! Unauthorized entry into Restricted Hazmat Yard. Halt immediately.", "CRITICAL");
+        } else {
+          fleet["VIGI-TRUCK-001"].risk = "NORMAL";
+        }
+        updateConflictZone({ hasConflict: false });
+      }
+    }
+
+    // --- 10. Voice Alert Dispatcher ---
+    let lastAlertText = "";
+    let alertTimer = 0;
+    const banner = document.getElementById('voiceAlertBanner');
+
+    function dispatchVoiceAlert(text, risk) {
+      if (text === lastAlertText && alertTimer > 0) return;
+      lastAlertText = text;
+      alertTimer = 4.0;
+
+      banner.style.display = 'block';
+      banner.style.background = (risk === "CRITICAL") ? '#dc2626' : (risk === "HIGH RISK" ? '#ea580c' : '#ca8a04');
+      banner.innerText = `📢 IN-CAB VOICE ALERT: ${text}`;
+
+      addTimelineEvent(text, risk);
+    }
+
+    function addTimelineEvent(text, risk) {
+      const container = document.getElementById('eventTimelineStream');
+      const timeStr = new Date().toTimeString().split(' ')[0];
+      const entry = document.createElement('div');
+      entry.className = 'event-entry';
+      const col = (risk === "CRITICAL") ? '#dc2626' : (risk === "HIGH RISK" ? '#ea580c' : '#ca8a04');
+      entry.innerHTML = `
+        <span style="font-weight: 800; color: ${col};">[${risk}]</span>
+        <span style="color: #64748b; font-weight: 700;">${timeStr}</span>
+        <span style="font-weight: 700; color: #0f172a;">${text}</span>
+      `;
+      container.insertBefore(entry, container.firstChild);
+      if (container.children.length > 30) container.removeChild(container.lastChild);
+    }
+
+    // --- 11. WebSocket Integration ---
+    let ws = null;
+    let operatingMode = "SIMULATION";
+
+    function connectWebSocket() {
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const url = `${proto}//${window.location.host}/ws/telemetry`;
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        document.getElementById('statWsPill').className = 'stat-pill pill-green';
+        document.getElementById('statWsPill').innerText = '● WS CONNECTED';
+      };
+
+      ws.onclose = () => {
+        document.getElementById('statWsPill').className = 'stat-pill pill-grey';
+        document.getElementById('statWsPill').innerText = '○ WS DISCONNECTED';
+        setTimeout(connectWebSocket, 3000);
+      };
+
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === "TELEMETRY_UPDATE" && operatingMode === "LIVE_HARDWARE") {
+            const v = msg.vehicle;
+            if (v && fleet[v.vehicle_id]) {
+              const f = fleet[v.vehicle_id];
+              const w = latLonToWorld(v.latitude, v.longitude);
+              f.targetPos.set(w.x, 0, w.z);
+              f.targetRot = v.heading_deg;
+              f.speedKmh = v.speed_kmh;
+              f.speedMps = v.speed_mps;
+              f.status = v.vehicle_status;
+              f.brake = v.brake_status;
+              f.reverse = v.reverse_status;
+              f.risk = v.risk_level;
+            }
+          }
+        } catch {}
+      };
+    }
+    connectWebSocket();
+
+    // Mode Toggle
+    document.getElementById('btnModeToggle').onclick = () => {
+      operatingMode = (operatingMode === "SIMULATION") ? "LIVE_HARDWARE" : "SIMULATION";
+      const btn = document.getElementById('btnModeToggle');
+      if (operatingMode === "SIMULATION") {
+        btn.innerText = "MODE: SIMULATION";
+        btn.className = "btn btn-mode pill-blue";
+        document.getElementById('telDataSourceBadge').innerText = "SIMULATION";
+      } else {
+        btn.innerText = "MODE: LIVE HARDWARE";
+        btn.className = "btn btn-mode pill-green";
+        document.getElementById('telDataSourceBadge').innerText = "LIVE ESP32";
+      }
+      fetch(`/api/system/mode?mode=${operatingMode}`, { method: 'POST' }).catch(() => {});
+    };
+
+    // --- 12. Camera Views & Vehicle Selection ---
+    let selectedVehicleId = "VIGI-TRUCK-001";
+    let cameraMode = "OVERVIEW";
+
+    function selectVehicle(id) {
+      selectedVehicleId = id;
+      renderFleetList();
+      renderTelemetryDrawer();
+    }
+
+    function setCameraView(mode) {
+      cameraMode = mode;
+      document.querySelectorAll('#cameraBar .btn').forEach(b => b.classList.remove('btn-active'));
+      event.target.classList.add('btn-active');
+
+      if (mode === 'OVERVIEW') {
+        camera.position.set(0, 160, -150);
+        controls.target.set(0, 0, 0);
+      } else if (mode === 'QUAY') {
+        camera.position.set(160, 65, 20);
+        controls.target.set(120, 15, 20);
+      } else if (mode === 'CROSSING') {
+        camera.position.set(-35, 45, -25);
+        controls.target.set(-35, 0, 15);
+      }
+    }
+
+    // Hotkeys F1..F5
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'F1') setCameraView('OVERVIEW');
+      if (e.key === 'F2') setCameraView('QUAY');
+      if (e.key === 'F3') setCameraView('CROSSING');
+      if (e.key === 'F4') setCameraView('COCKPIT');
+      if (e.key === 'F5') setCameraView('FOLLOW');
+    });
+
+    // --- 13. UI Render Loops ---
+    function renderFleetList() {
+      const container = document.getElementById('vehicleListContainer');
+      container.innerHTML = '';
+
+      Object.values(fleet).forEach(v => {
+        const card = document.createElement('div');
+        card.className = `vehicle-card ${v.id === selectedVehicleId ? 'selected' : ''}`;
+        card.onclick = () => selectVehicle(v.id);
+
+        const riskBadge = v.risk === "CRITICAL" ? "pill-red" : (v.risk === "HIGH RISK" ? "pill-red" : (v.risk === "CAUTION" ? "pill-blue" : "pill-green"));
+
+        card.innerHTML = `
+          <div class="v-header">
+            <span class="v-id">${v.id}</span>
+            <span class="stat-pill ${riskBadge}" style="font-size: 9px; padding: 2px 6px;">${v.risk}</span>
+          </div>
+          <div class="v-meta">
+            <span>${v.category}</span>
+            <b>${v.speedKmh.toFixed(1)} km/h</b>
+          </div>
+          <div class="v-meta" style="font-size: 9px; color: #94a3b8;">
+            <span>Mode: ${v.mode}</span>
+            <span>Comm: ${v.commStatus}</span>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function renderTelemetryDrawer() {
+      const v = fleet[selectedVehicleId];
+      if (!v) return;
+
+      const container = document.getElementById('telemetryDrawerContent');
+      const brakeClass = v.brake === "ON" ? "badge-on" : (v.brake === "OFF" ? "badge-off" : "badge-unknown");
+      const revClass = v.reverse === "ON" ? "badge-on" : (v.reverse === "OFF" ? "badge-off" : "badge-unknown");
+
+      container.innerHTML = `
+        <div style="margin-bottom: 2px;">
+          <h2 style="font-size: 14px; font-weight: 800; color: #0f172a;">${v.id}</h2>
+          <p style="font-size: 11px; color: #047857; font-weight: 600;">${v.displayName}</p>
+        </div>
+
+        <div class="data-group">
+          <div class="data-title">Kinematics & Motion</div>
+          <div class="data-row"><span class="data-label">Speed:</span><span class="data-value">${v.speedKmh.toFixed(1)} km/h (${v.speedMps.toFixed(1)} m/s)</span></div>
+          <div class="data-row"><span class="data-label">Heading:</span><span class="data-value">${v.heading.toFixed(0)}°</span></div>
+          <div class="data-row"><span class="data-label">Acceleration:</span><span class="data-value">${v.accel.toFixed(2)} m/s²</span></div>
+          <div class="data-row"><span class="data-label">Status:</span><span class="data-value">${v.status}</span></div>
+        </div>
+
+        <div class="data-group">
+          <div class="data-title">GNSS & Position Uncertainty</div>
+          <div class="data-row"><span class="data-label">GNSS 3D Fix:</span><span class="data-value" style="color: #059669;">VALID FIX</span></div>
+          <div class="data-row"><span class="data-label">Position Accuracy:</span><span class="data-value">±${v.accuracyM.toFixed(1)} m</span></div>
+          <div class="data-row"><span class="data-label">Uncertainty Radius:</span><span class="data-value">${(v.accuracyM * 1.5).toFixed(1)} m ground ring</span></div>
+        </div>
+
+        <div class="data-group">
+          <div class="data-title">CAN / Mechanical Signals</div>
+          <div class="data-row"><span class="data-label">Brake Pedal:</span><span class="badge-signal ${brakeClass}">${v.brake}</span></div>
+          <div class="data-row"><span class="data-label">Reverse Status:</span><span class="badge-signal ${revClass}">${v.reverse}</span></div>
+        </div>
+
+        <div class="data-group" style="background: #f0fdf4; border-color: #bbf7d0;">
+          <div class="data-title" style="color: #166534;">Edge ML Risk Classification</div>
+          <div class="data-row"><span class="data-label">Model:</span><span class="data-value">Scikit-Learn Edge Classifier</span></div>
+          <div class="data-row"><span class="data-label">Status:</span><span class="data-value" style="color: #15803d;">TRAINED_LOCAL_MODEL</span></div>
+          <div class="data-row"><span class="data-label">Inference Latency:</span><span class="data-value">4.2 ms</span></div>
+          <div class="data-row"><span class="data-label">Confidence:</span><span class="data-value">94.8%</span></div>
+          <div class="data-row"><span class="data-label">Current Risk:</span><span class="data-value" style="color: #059669; font-weight: 800;">${v.risk}</span></div>
+        </div>
+      `;
+    }
+
+    renderFleetList();
+    renderTelemetryDrawer();
+
+    // --- 14. Main Animation & Render Loop ---
+    let lastTime = performance.now();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const now = performance.now();
+      const delta = (now - lastTime) / 1000;
+      lastTime = now;
+
+      if (alertTimer > 0) {
+        alertTimer -= delta;
+        if (alertTimer <= 0) banner.style.display = 'none';
+      }
+
+      // Execute scenario kinematics
+      executeScenarios(delta);
+
+      // Smooth vehicle visual interpolation
+      Object.values(fleet).forEach(v => {
+        if (!v.mesh) return;
+
+        v.mesh.position.lerp(v.targetPos, 0.12);
+        const rad = v.targetRot * DEG_TO_RAD;
+        v.mesh.rotation.y = THREE.MathUtils.lerp(v.mesh.rotation.y, rad, 0.15);
+
+        // Update ground uncertainty ring
+        if (v.uncertaintyMesh) {
+          v.uncertaintyMesh.position.set(v.mesh.position.x, 0.08, v.mesh.position.z);
+        }
+      });
+
+      // Update camera follow / cockpit
+      const targetVehicle = fleet[selectedVehicleId];
+      if (targetVehicle && targetVehicle.mesh) {
+        if (cameraMode === 'COCKPIT') {
+          const eye = targetVehicle.mesh.position.clone().add(new THREE.Vector3(0, 2.4, 1.8));
+          camera.position.copy(eye);
+          const fwd = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), targetVehicle.mesh.rotation.y);
+          camera.lookAt(eye.clone().add(fwd.multiplyScalar(20)));
+        } else if (cameraMode === 'FOLLOW') {
+          const back = new THREE.Vector3(0, 6, -16).applyAxisAngle(new THREE.Vector3(0, 1, 0), targetVehicle.mesh.rotation.y);
+          camera.position.lerp(targetVehicle.mesh.position.clone().add(back), 0.1);
+          controls.target.lerp(targetVehicle.mesh.position.clone().add(new THREE.Vector3(0, 2, 0)), 0.1);
+        }
+      }
+
+      updateV2VLinks();
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // Resize handler
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Refresh UI every 500ms
+    setInterval(() => {
+      renderFleetList();
+      renderTelemetryDrawer();
+    }, 500);
+  </script>
+</body>
+</html>
